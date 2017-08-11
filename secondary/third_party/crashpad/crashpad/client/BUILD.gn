@@ -10,11 +10,11 @@ static_library("client") {
   sources = [
     "crash_report_database.cc",
     "crash_report_database.h",
-    "crash_report_database_mac.mm",
-    "crash_report_database_win.cc",
+#    "crash_report_database_mac.mm",
+#    "crash_report_database_win.cc",
     "crashpad_client.h",
-    "crashpad_client_mac.cc",
-    "crashpad_client_win.cc",
+#    "crashpad_client_mac.cc",
+#    "crashpad_client_win.cc",
     "crashpad_info.cc",
     "crashpad_info.h",
     "prune_crash_reports.cc",
@@ -26,9 +26,9 @@ static_library("client") {
     "simple_string_dictionary.cc",
     "simple_string_dictionary.h",
     "simulate_crash.h",
-    "simulate_crash_mac.cc",
-    "simulate_crash_mac.h",
-    "simulate_crash_win.h",
+#    "simulate_crash_mac.cc",
+#    "simulate_crash_mac.h",
+#    "simulate_crash_win.h",
   ]
 
   if (is_mac) {
@@ -41,9 +41,9 @@ static_library("client") {
   public_configs = [ ":client_config" ]
 
   deps = [
-    "//base",
     "//third_party/crashpad/crashpad/compat",
     "//third_party/crashpad/crashpad/util",
+    "//third_party/mini_chromium/base",
   ]
 
   if (is_win) {

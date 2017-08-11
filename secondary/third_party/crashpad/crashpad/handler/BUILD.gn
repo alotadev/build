@@ -29,7 +29,7 @@ static_library("handler_lib") {
     "../minidump",
     "../snapshot",
     "../tools:tool_support",
-    "//base",
+    "//third_party/mini_chromium/base",
   ]
 
   if (is_win) {
@@ -47,7 +47,7 @@ executable("crashpad_handler") {
   deps = [
     ":handler_lib",
     "../compat",
-    "//base",
+    "//third_party/mini_chromium/base",
     "//build/win:default_exe_manifest",
   ]
 

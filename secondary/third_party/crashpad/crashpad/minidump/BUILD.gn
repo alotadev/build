@@ -7,7 +7,7 @@ static_library("minidump") {
     "../compat",
     "../snapshot",
     "../util",
-    "//base",
+    "//third_party/mini_chromium/base",
   ]
 
   include_dirs = [ ".." ]
