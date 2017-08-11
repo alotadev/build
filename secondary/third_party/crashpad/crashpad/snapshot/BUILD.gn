@@ -134,3 +134,35 @@ if (is_win) {
   group("snapshot_api") {
   }
 }
+
+static_library("test_lib") {
+  testonly = true
+
+  deps = [
+    ":snapshot",
+    "../compat",
+    "../util",
+    "//third_party/mini_chromium/base",
+  ]
+
+  include_dirs = [ ".." ]
+
+  sources = [
+    "test/test_cpu_context.cc",
+    "test/test_cpu_context.h",
+    "test/test_exception_snapshot.cc",
+    "test/test_exception_snapshot.h",
+    "test/test_memory_map_region_snapshot.cc",
+    "test/test_memory_map_region_snapshot.h",
+    "test/test_memory_snapshot.cc",
+    "test/test_memory_snapshot.h",
+    "test/test_module_snapshot.cc",
+    "test/test_module_snapshot.h",
+    "test/test_process_snapshot.cc",
+    "test/test_process_snapshot.h",
+    "test/test_system_snapshot.cc",
+    "test/test_system_snapshot.h",
+    "test/test_thread_snapshot.cc",
+    "test/test_thread_snapshot.h",
+  ]
+}
