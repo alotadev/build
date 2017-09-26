@@ -100,6 +100,20 @@ static_library("test_lib") {
   ]
 }
 
+# GN orders target flags before config flags. These flags need to be after
+# the -Wall added by the default config, so they can't live on the executable
+# target (whose flags appear before the default config).
+config("minidump_test_config") {
+  visibility = [ "./*" ]
+  # Allows initializers like "MINIDUMP_STRING x = {0}" which don't provide
+  # values for all fields. Normally we would use "= {}", but MSVC doesn't like
+  # it, possibly because of the zero-length array in MINIDUMP_STRING.
+  # TODO: if(fuchsia)
+  cflags = [
+    "-Wno-missing-field-initializers"
+  ]
+}
+
 executable("minidump_test") {
   testonly = true
 
@@ -137,4 +151,6 @@ executable("minidump_test") {
     "minidump_user_stream_writer_test.cc",
     "minidump_writable_test.cc",
   ]
+
+  configs += [ ":minidump_test_config" ]
 }
