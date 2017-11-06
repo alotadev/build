@@ -48,7 +48,9 @@ template("go_build") {
     use_strip = is_fuchsia
 
     output_path = "${root_out_dir}/${output_name}"
-    outputs = [ output_path ]
+    outputs = [
+      output_path,
+    ]
 
     if (use_strip) {
       unstripped_output_path = "${root_out_dir}/exe.unstripped/${output_name}"
@@ -72,8 +74,8 @@ template("go_build") {
       rebase_path("//."),
       "--root-out-dir",
       rebase_path(root_out_dir, root_build_dir),
-      "--zircon-build-dir",
-      rebase_path("//out/build-zircon/build-${zircon_project}"),
+      "--zircon-sysroot",
+      rebase_path(zircon_sysroot),
       "--depfile",
       rebase_path(depfile),
       "--current-cpu",
@@ -89,7 +91,10 @@ template("go_build") {
     ]
 
     if (use_strip) {
-      args += [ "--unstripped-binname", "exe.unstripped/${output_name}" ]
+      args += [
+        "--unstripped-binname",
+        "exe.unstripped/${output_name}",
+      ]
     }
 
     if (defined(invoker.test) && invoker.test) {
