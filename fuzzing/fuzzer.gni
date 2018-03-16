@@ -1,0 +1,263 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/package.gni")
+
+# Declare a fuzzed executable target.
+#
+# This target allows you to create an instrumented executable file for fuzzing
+# with a sanitizer.  Fuzz target authors should not use this template directly.
+# Instead, use 'fuzz-target' with an associated 'fuzz-package' specifying the
+# supported sanitizers.
+#
+# Flags: cflags, cflags_c, cflags_cc,  asmflags, defines, include_dirs,
+#        ldflags, lib_dirs, libs,
+# Deps: data_deps, deps, public_deps
+# Dependent configs: all_dependent_configs, public_configs
+# General: check_includes, configs, data, inputs, output_name,
+#          output_extension, public, sources, testonly, visibility
+template("fuzzed_executable") {
+  executable(target_name) {
+    _target_type = "fuzzed_executable"
+
+    # Explicitly forward visibility, implicitly forward everything else.
+    # See comment in //build/config/BUILDCONFIG.gn for details on this pattern.
+    forward_variables_from(invoker, [ "visibility" ])
+    forward_variables_from(invoker, "*", [ "visibility" ])
+  }
+}
+
+# Defines a fuzz target binary
+#
+# The fuzz_target template is used to create binaries which leverage LLVM's
+# libFuzzer to perform fuzz testing.
+#
+# Parameters
+#
+#   options (optional)
+#     [list of strings] Each option is of the form "key=value" and indicates
+#     command line options that the fuzzer should be invoked with. Valid keys
+#     are libFuzzer options (https://llvm.org/docs/LibFuzzer.html#options).
+#
+#   dictionary (optional)
+#     [file] If specified, a file containing inputs, one per line, that the
+#     fuzzer will use to generate new mutations.
+#
+#   corpora (optional)
+#     [list of strings] One or more locations from which to get a fuzzing
+#     corpus, e.g. a project path to a directory of artifacts, a project
+#     path to a CIPD ensure file, or a GCS URL.
+#
+#   sources (optional)
+#     [list of files] The C++ sources required to build the fuzzer binary. If
+#     present, this must define 'LLVMFuzzerTestOneInput' and will typically be
+#     a single file (with deps including the software under test).
+#
+template("fuzz_target") {
+  assert(
+      defined(invoker.dictionary) || defined(invoker.options) ||
+          defined(invoker.corpora) || defined(invoker.sources),
+      "At least one of [dictionary, options, corpora, sources] must be defined for $target_name")
+
+  forward_variables_from(invoker,
+                         [
+                           "dictionary",
+                           "options",
+                           "corpora",
+                         ])
+  if (current_toolchain == toolchain_variant.base) {
+    fuzz_gen_dir = "${target_gen_dir}/${target_name}"
+    fuzz_name = target_name
+    # Copy the fuzzer dictionary
+    if (defined(dictionary)) {
+      copy("${fuzz_name}_dictionary") {
+        sources = [
+          dictionary,
+        ]
+        outputs = [
+          "${fuzz_gen_dir}/dictionary",
+        ]
+      }
+    } else {
+      action("${fuzz_name}_dictionary") {
+        script = "//build/fuzzing/echo.py"
+        outputs = [
+          "${fuzz_gen_dir}/dictionary",
+        ]
+        args = [ rebase_path("${fuzz_gen_dir}/dictionary") ]
+      }
+    }
+
+    # Copy the options the fuzzer should be invoked with
+    action("${fuzz_name}_options") {
+      script = "//build/fuzzing/echo.py"
+      outputs = [
+        "${fuzz_gen_dir}/options",
+      ]
+      args = [ rebase_path("${fuzz_gen_dir}/options") ]
+      if (defined(options)) {
+        args += options
+      }
+    }
+
+    # Copy the corpora available for the fuzzer
+    action("${fuzz_name}_corpora") {
+      script = "//build/fuzzing/echo.py"
+      outputs = [
+        "${fuzz_gen_dir}/corpora",
+      ]
+      args = [ rebase_path("${fuzz_gen_dir}/corpora") ]
+      if (defined(corpora)) {
+        args += corpora
+      }
+    }
+  } else {
+    if (defined(dictionary)) {
+      not_needed([ "dictionary" ])
+    }
+    if (defined(options)) {
+      not_needed([ "options" ])
+    }
+    if (defined(corpora)) {
+      not_needed([ "corpora" ])
+    }
+  }
+
+  # Build the actual fuzzer, and ensure the necessary inputs are created or copied
+  if (defined(invoker.sources)) {
+    fuzzed_executable(target_name) {
+      forward_variables_from(invoker, "*")
+      testonly = true
+    }
+  }
+}
+
+set_defaults("fuzz_target") {
+  configs = default_executable_configs
+}
+
+# Defines a package of fuzz target binaries
+#
+# The fuzz_package template is used to bundle several fuzz_targets and their
+# associated data into a single Fuchsia package.  NOTE! "_fuzzers" is appended
+# to the package name, that is, 'fuzz-package("foo")' should be referenced as
+# "foo_fuzzers" in the package manifests.
+#
+# Parameters
+#
+#   targets (required)
+#     [list of targets] The fuzz_targets to include in this package.
+#
+#   sanitizers (required)
+#     [list of variants] A set of sanitizer variants.  The resulting package
+#     will contain binaries for each sanitizer/target combination.
+#
+#   meta (optional)
+#   binaries (optional)
+#   tests (optional)
+#   libraries (optional)
+#   resources (optional)
+#   extra (optional)
+#     Passed through to the normal package template.
+#
+template("fuzz_package") {
+  assert(defined(invoker.targets), "targets must be defined for $target_name}")
+  assert(defined(invoker.sanitizers),
+         "sanitizers must be defined for $target_name")
+  not_needed(invoker, "*")
+
+  # Only assemble the package once; handle the specific sanitizers in the loop below
+  if (current_toolchain == toolchain_variant.base) {
+    fuzz = {
+      binaries = []
+      extra = []
+      deps = []
+      libraries = []
+      meta = []
+      resources = []
+      tests = []
+      forward_variables_from(invoker, "*")
+    }
+
+    foreach(fuzz_target, fuzz.targets) {
+      fuzz_name = get_label_info(fuzz_target, "name")
+
+      # Find the executable variant for the sanitized fuzzer
+      sanitized_target=""
+      foreach(sanitizer, fuzz.sanitizers) {
+        foreach(selector, select_variant_canonical) {
+          if (selector.variant == "${sanitizer}-fuzzer") {
+            selected = false
+            if (!selected && defined(selector.target_type)) {
+              selector_target_type = []
+              selector_target_type = selector.target_type
+              selected = selector_target_type[0] == "fuzzed_executable"
+            }
+            if (!selected && defined(selector.output_name)) {
+              selector_output_name = []
+              selector_output_name = selector.output_name
+              selected = selector_output_name[0] == fuzz_name
+            }
+            if (selected && sanitized_target == "") {
+              sanitized_target="${fuzz_target}(${toolchain_variant.base}-${sanitizer}-fuzzer)"
+            }
+          }
+        }
+      }
+
+      fuzz_gen_dir = get_label_info(fuzz_target, "target_gen_dir") + "/${fuzz_name}"
+
+      # Only add the binary and component manifest if fuzzing
+      if (sanitized_target != "") {
+        fuzz_out_dir = get_label_info("${sanitized_target}", "root_out_dir")
+
+        fuzz.deps += [
+          sanitized_target,
+        ]
+
+        fuzz.binaries += [
+          {
+            name = fuzz_name
+            source = rebase_path("${fuzz_out_dir}/${fuzz_name}")
+            dest = "${fuzz_name}"
+          },
+        ]
+      }
+
+      # Resources are common to all variants
+      fuzz.deps += [
+        "${fuzz_target}_corpora",
+        "${fuzz_target}_dictionary",
+        "${fuzz_target}_options",
+      ]
+      fuzz.resources += [
+        {
+          path = rebase_path("${fuzz_gen_dir}/corpora")
+          dest = "${fuzz_name}/corpora"
+        },
+        {
+          path = rebase_path("${fuzz_gen_dir}/dictionary")
+          dest = "${fuzz_name}/dictionary"
+        },
+        {
+          path = rebase_path("${fuzz_gen_dir}/options")
+          dest = "${fuzz_name}/options"
+        },
+      ]
+    }
+
+    # Build the actual package
+    package("${target_name}_fuzzers") {
+      testonly = true
+      deps = fuzz.deps
+
+      binaries = fuzz.binaries
+      extra = fuzz.extra
+      libraries = fuzz.libraries
+      meta = fuzz.meta
+      resources = fuzz.resources
+      tests = fuzz.tests
+    }
+  }
+}
