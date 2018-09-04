@@ -50,6 +50,9 @@ variant("ubsan") {
 
 variant("fuzzer") {
   common_flags = [ "-fsanitize=fuzzer" ]
+  if (is_fuchsia) {
+    libs = [ "zircon" ]
+  }
 }
 
 variant("sancov") {
