@@ -69,6 +69,7 @@ template("fuzz_target") {
   if (current_toolchain == toolchain_variant.base) {
     fuzz_gen_dir = "${target_gen_dir}/${target_name}"
     fuzz_name = target_name
+
     # Copy the fuzzer dictionary
     if (defined(dictionary)) {
       copy("${fuzz_name}_dictionary") {
@@ -110,6 +111,26 @@ template("fuzz_target") {
       args = [ rebase_path("${fuzz_gen_dir}/corpora") ]
       if (defined(corpora)) {
         args += corpora
+      }
+    }
+
+    # Create component manifest targets for all the sanitizers
+    action("${fuzz_name}_cmx") {
+      script = "//build/fuzzing/gen_fuzzer_cmx.py"
+      outputs = [
+        "${fuzz_gen_dir}/${fuzz_name}.cmx",
+      ]
+      args = [
+        "--out",
+        rebase_path("${fuzz_gen_dir}/${fuzz_name}.cmx"),
+        "--bin",
+        "${fuzz_name}",
+      ]
+      if (defined(invoker.cmx)) {
+        args += [
+          "--cmx",
+          rebase_path(invoker.cmx),
+        ]
       }
     }
   } else {
@@ -184,7 +205,7 @@ template("fuzz_package") {
       fuzz_name = get_label_info(fuzz_target, "name")
 
       # Find the executable variant for the sanitized fuzzer
-      sanitized_target=""
+      sanitized_target = ""
       foreach(sanitizer, fuzz.sanitizers) {
         foreach(selector, select_variant_canonical) {
           if (selector.variant == "${sanitizer}-fuzzer") {
@@ -200,20 +221,21 @@ template("fuzz_package") {
               selected = selector_output_name[0] == fuzz_name
             }
             if (selected && sanitized_target == "") {
-              sanitized_target="${fuzz_target}(${toolchain_variant.base}-${sanitizer}-fuzzer)"
+              sanitized_target = "${fuzz_target}(${toolchain_variant.base}-${sanitizer}-fuzzer)"
             }
           }
         }
       }
 
-      fuzz_gen_dir = get_label_info(fuzz_target, "target_gen_dir") + "/${fuzz_name}"
+      fuzz_gen_dir =
+          get_label_info(fuzz_target, "target_gen_dir") + "/${fuzz_name}"
 
       # Only add the binary and component manifest if fuzzing
       if (sanitized_target != "") {
         fuzz_out_dir = get_label_info("${sanitized_target}", "root_out_dir")
-
         fuzz.deps += [
           sanitized_target,
+          "${fuzz_target}_cmx",
         ]
 
         fuzz.binaries += [
@@ -221,6 +243,13 @@ template("fuzz_package") {
             name = fuzz_name
             source = rebase_path("${fuzz_out_dir}/${fuzz_name}")
             dest = "${fuzz_name}"
+          },
+        ]
+
+        fuzz.meta += [
+          {
+            path = rebase_path("${fuzz_gen_dir}/${fuzz_name}.cmx")
+            dest = "${fuzz_name}.cmx"
           },
         ]
       }
