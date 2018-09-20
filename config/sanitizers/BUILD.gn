@@ -55,6 +55,10 @@ variant("fuzzer") {
   }
 }
 
+variant("fuzzer_no_link") {
+  common_flags = [ "-fsanitize=fuzzer-no-link" ]
+}
+
 variant("sancov") {
   common_flags = [ "-fsanitize-coverage=trace-pc-guard" ]
 }
